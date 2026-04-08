@@ -2,6 +2,7 @@ import os
 
 import discord
 import tiktoken
+from aiohttp import web
 from dotenv import load_dotenv
 
 from core.discord.guards import is_messageable
@@ -12,11 +13,9 @@ load_dotenv()
 
 MAX_TOKENS = 10000
 
-# 1. СИНХРОННЫЕ РЕСУРСЫ
 encoding = tiktoken.get_encoding("o200k_base")
 
 
-# 2. АРХИТЕКТУРА КЛИЕНТА
 class ElementalBot(discord.Client):
     def __init__(self) -> None:
         intents = discord.Intents.default()
@@ -37,9 +36,34 @@ class ElementalBot(discord.Client):
 bot = ElementalBot()
 
 
+# --- 1. Асинхронный вахтер ---
+async def health_check(request: web.Request) -> web.Response:
+    # Инспектор от Hugging Face придет сюда
+    return web.Response(text="Bot is alive.")
+
+
+async def start_web_server() -> None:
+    app = web.Application()
+    app.router.add_get("/", health_check)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    # Строго 0.0.0.0 и порт 7860
+    site = web.TCPSite(runner, "0.0.0.0", 7860)
+    await site.start()
+    print("Веб-сервер поднят в асинхронном контуре на 7860.")
+
+
+# --- 2. Встраиваем вахтера в запуск бота ---
+@bot.event
+async def setup_hook() -> None:
+    # Эта штука запускается ДО того, как бот выйдет на связь
+    # Запускаем сервер как фоновую задачу в ТОМ ЖЕ цикле (loop), что и бот
+    bot.loop.create_task(start_web_server())
+
+
 @bot.event
 async def on_ready() -> None:
-    print(f"{bot.user} на связи.")
+    print(f"{bot.user} на связи. Жду приказов.")
 
 
 @bot.event
