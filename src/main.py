@@ -32,6 +32,9 @@ class ElementalBot(discord.Client):
 
         self.llm_client = OpenRouterClient(api_key=api_key)
 
+        # 2. Запуск вахтера (Web Server)
+        self.loop.create_task(start_web_server())
+
 
 bot = ElementalBot()
 
@@ -51,14 +54,6 @@ async def start_web_server() -> None:
     site = web.TCPSite(runner, "0.0.0.0", 7860)
     await site.start()
     print("Веб-сервер поднят в асинхронном контуре на 7860.")
-
-
-# --- 2. Встраиваем вахтера в запуск бота ---
-@bot.event
-async def setup_hook() -> None:
-    # Эта штука запускается ДО того, как бот выйдет на связь
-    # Запускаем сервер как фоновую задачу в ТОМ ЖЕ цикле (loop), что и бот
-    bot.loop.create_task(start_web_server())
 
 
 @bot.event
