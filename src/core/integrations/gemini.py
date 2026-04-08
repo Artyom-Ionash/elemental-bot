@@ -44,29 +44,37 @@ class GeminiClient:
 
         async with aiohttp.ClientSession() as session:
             for attempt in range(max_retries):
-                async with session.post(url, json=payload) as resp:
-                    # Если база перегружена (503) или слишком много запросов (429)
-                    if resp.status in (503, 429):
-                        if attempt < max_retries - 1:
-                            # Увеличиваем задержку: 2 сек, 4 сек, 8 сек...
-                            sleep_time = base_delay * (2**attempt)
-                            logger.info("[Gemini] Сервер шлёт нахер (%s). Ждём %s сек. Попытка %d/%d...", resp.status, sleep_time, attempt + 1, max_retries)
-                            await asyncio.sleep(sleep_time)
-                            continue  # Пробуем еще раз
-                        else:
-                            # Если исчерпали попытки — падаем с честной ошибкой
+                try:  # <--- Добавляем блок try-except
+                    async with session.post(url, json=payload) as resp:
+                        # Если база перегружена (503) или слишком много запросов (429)
+                        if resp.status in (503, 429):
+                            if attempt < max_retries - 1:
+                                # Увеличиваем задержку: 2 сек, 4 сек, 8 сек...
+                                sleep_time = base_delay * (2**attempt)
+                                logger.info("[Gemini] Сервер шлёт нахер (%s). Ждём %s сек. Попытка %d/%d...", resp.status, sleep_time, attempt + 1, max_retries)
+                                await asyncio.sleep(sleep_time)
+                                continue  # Пробуем еще раз
+                            else:
+                                # Если исчерпали попытки — падаем с честной ошибкой
+                                error_text = await resp.text()
+                                raise RuntimeError(f"Gemini API сдох окончательно [{resp.status}]: {error_text}")
+
+                        # Если ошибка другая (например 400 Bad Request) - падаем сразу
+                        if not resp.ok:
                             error_text = await resp.text()
-                            raise RuntimeError(f"Gemini API сдох окончательно [{resp.status}]: {error_text}")
+                            raise RuntimeError(f"Gemini API Error [{resp.status}]: {error_text}")
 
-                    # Если ошибка другая (например 400 Bad Request) - падаем сразу
-                    if not resp.ok:
-                        error_text = await resp.text()
-                        raise RuntimeError(f"Gemini API Error [{resp.status}]: {error_text}")
-
-                    # Если всё чётко (200 OK) — выходим из цикла
-                    data = await resp.json()
-                    break
-
+                        # Если всё чётко (200 OK) — выходим из цикла
+                        data = await resp.json()
+                        break
+                except (aiohttp.ServerDisconnectedError, aiohttp.ClientError) as e:
+                    # Это наш случай с VPN
+                    if attempt < max_retries - 1:
+                        logger.warning("[Gemini] Оборыв связи: %s. Ждем 5 сек и пробуем снова.", e)
+                        await asyncio.sleep(5)
+                        continue
+                    else:
+                        raise RuntimeError(f"Связь с сервером отвалилась окончательно: {e}")
             # Парсим ответ
             try:
                 text_response = data["candidates"][0]["content"]["parts"][0]["text"]
