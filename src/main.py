@@ -102,7 +102,11 @@ async def on_message(message: discord.Message) -> None:
 
     current_model = "gemini-3.1-flash-lite-preview"
 
+    # Вычищаем упоминание бота из запроса
     user_request = message.content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
+    # Запоминаем автора и текст, чтобы вставить их в самый конец
+    current_message_block = f"{message.author.name}: {user_request}\n"
+
     if not user_request:
         user_request = "Проанализируй переписку выше:"
 
@@ -111,10 +115,6 @@ async def on_message(message: discord.Message) -> None:
         "пока речь не заходит об алгоритмах или сравнении явным образом. Взвешивай плюсы и минусы, но отвечай компактно."
         "Сопровождай ответы сжатым описанием своих действий, общайся как реальный человек."
     )
-    base_prompt_text = f"{user_request}\n\n--- КОНТЕКСТ ИЗ ЧАТА ---\n"
-
-    base_tokens = len(encoding.encode(system_prompt + base_prompt_text))
-    available_tokens_for_log = MAX_TOKENS - base_tokens
 
     messages_to_process: list[str] = []
     current_log_tokens = 0
@@ -122,12 +122,12 @@ async def on_message(message: discord.Message) -> None:
 
     async with channel.typing():
         # --- 3. ИЗВЛЕЧЕНИЕ ИСТОРИИ ---
-
+        # Выгребаем историю ДО этого сообщения
         async for msg in channel.history(limit=500, before=message):
             msg_line = f"{msg.author.name}: {msg.content}\n"
             msg_tokens = len(encoding.encode(msg_line))
 
-            if current_log_tokens + msg_tokens > available_tokens_for_log:
+            if current_log_tokens + msg_tokens > MAX_TOKENS - 1000:  # Запас на промпт
                 break
 
             messages_to_process.append(msg_line)
@@ -135,8 +135,11 @@ async def on_message(message: discord.Message) -> None:
             message_count += 1
 
         messages_to_process.reverse()
+        # Собираем лог
         context = "".join(messages_to_process)
-        final_prompt = base_prompt_text + context
+
+        # Сборка финального промпта: История + актуальное сообщение в самом конце
+        final_prompt = f"--- ИСТОРИЯ ЧАТА ---\n{context}\n--- АКТУАЛЬНЫЙ ЗАПРОС ---\n{current_message_block}"
 
         # --- 4. ЗАПРОС К LLM ---
 
