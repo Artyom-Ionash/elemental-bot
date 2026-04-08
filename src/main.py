@@ -1,3 +1,4 @@
+import io
 import logging
 import os
 import traceback
@@ -145,7 +146,22 @@ async def on_message(message: discord.Message) -> None:
                 {"role": "user", "content": final_prompt},
             ]
 
-            # [ОБНОВЛЕНИЕ]: Принимаем унифицированный словарь от Gemini
+            # [ОБНОВЛЕНИЕ]: ИНСПЕКЦИОННЫЙ ЛЮК (DEBUG MODE)
+            is_debug = os.getenv("DEBUG", "false").lower() in ("true", "1", "yes")
+            if is_debug:
+                log_channel_id = os.getenv("DISCORD_LOG_CHANNEL_ID")
+                if log_channel_id:
+                    log_channel = bot.get_channel(int(log_channel_id))
+                    if log_channel:
+                        # Собираем слепок того, что уйдёт в модель
+                        debug_dump = f"# SYSTEM PROMPT\n{system_prompt}\n\n# FINAL PROMPT\n{final_prompt}"
+                        # Конвертируем строку в байты, чтобы Дискорд схавал как файл
+                        file_bytes = io.BytesIO(debug_dump.encode("utf-8"))
+                        discord_file = discord.File(fp=file_bytes, filename="context_dump.md")
+
+                        await log_channel.send("🛠 **[DEBUG]** Слепок контекста перед отправкой в LLM:", file=discord_file)
+
+            # Принимаем унифицированный словарь от Gemini
             response_data = await bot.llm_client.create_completion(
                 model=current_model,
                 messages=messages,
