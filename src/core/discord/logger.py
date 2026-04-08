@@ -10,19 +10,18 @@ class DiscordHandler(logging.Handler):
         self.channel_id = channel_id
 
     def emit(self, record: logging.LogRecord) -> None:
-        # Вот здесь магия: getMessage() заменяет %s на реальные значения
-        formatted_message = record.getMessage()
+        # Получаем форматированное сообщение (включая INFO, ERROR, WARNING)
+        message = self.format(record)
 
-        # Теперь отправляем уже "чистый" текст
-        self.bot.loop.create_task(self.send_log(record, formatted_message))
+        # Экранируем символы, чтобы не сломать Markdown Дискорда
+        message = message.replace("*", "\\*").replace("_", "\\_").replace("`", "\\`")
 
-    async def send_log(self, record: logging.LogRecord, message: str) -> None:
+        # Отправляем в очередь
+        self.bot.loop.create_task(self.send_log(record.levelname, message))
+
+    async def send_log(self, level: str, message: str) -> None:
         channel = self.bot.get_channel(self.channel_id)
         if channel:
-            # Тут вставляем отформатированное сообщение
-            await channel.send(f"**[{record.levelname}]** {message}")
-
-
-# В setup_hook бота добавь:
-# handler = DiscordHandler(self, 1234567890) # ID твоего канала
-# logging.getLogger('discord').addHandler(handler)
+            # Делаем лог красивым и читаемым
+            color = "🔴" if level in ["ERROR", "CRITICAL"] else "🟡" if level == "WARNING" else "🟢"
+            await channel.send(f"{color} **[{level}]** `{message[:1900]}`")

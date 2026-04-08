@@ -1,3 +1,5 @@
+import asyncio  # <--- Добавили для паузы
+import logging
 from collections.abc import Iterable
 from typing import Any
 
@@ -5,21 +7,13 @@ import aiohttp
 
 from core.types.llm import MessageParam
 
+logger = logging.getLogger(__name__)
+
 
 class GeminiClient:
     def __init__(self, api_key: str) -> None:
         self.api_key = api_key
         self.base_url = "https://generativelanguage.googleapis.com/v1beta/models"
-        # 1. Резервируем место под постоянную трубу
-        self._session: aiohttp.ClientSession | None = None
-
-    # 2. Ленивая инициализация сессии с ЖЕСТКИМ ТАЙМАУТОМ
-    def _get_session(self) -> aiohttp.ClientSession:
-        if self._session is None or self._session.closed:
-            # Если Гугл тупит дольше 15 секунд — рубим нахер, чтоб не вешать бота
-            timeout = aiohttp.ClientTimeout(total=15)
-            self._session = aiohttp.ClientSession(timeout=timeout)
-        return self._session
 
     async def create_completion(
         self,
@@ -44,28 +38,40 @@ class GeminiClient:
 
         url = f"{self.base_url}/{model}:generateContent?key={self.api_key}"
 
-        # 3. Берем нашу ПОСТОЯННУЮ трубу, а не создаем новую
-        session = self._get_session()
+        # --- НАСТРОЙКИ АМОРТИЗАТОРА ---
+        max_retries = 3
+        base_delay = 2  # Секунды
 
-        try:
-            async with session.post(url, json=payload) as resp:
-                if not resp.ok:
-                    error_text = await resp.text()
-                    raise RuntimeError(f"Gemini API Error [{resp.status}]: {error_text}")
+        async with aiohttp.ClientSession() as session:
+            for attempt in range(max_retries):
+                async with session.post(url, json=payload) as resp:
+                    # Если база перегружена (503) или слишком много запросов (429)
+                    if resp.status in (503, 429):
+                        if attempt < max_retries - 1:
+                            # Увеличиваем задержку: 2 сек, 4 сек, 8 сек...
+                            sleep_time = base_delay * (2**attempt)
+                            logger.info("[Gemini] Сервер шлёт нахер (%s). Ждём %s сек. Попытка %d/%d...", resp.status, sleep_time, attempt + 1, max_retries)
+                            await asyncio.sleep(sleep_time)
+                            continue  # Пробуем еще раз
+                        else:
+                            # Если исчерпали попытки — падаем с честной ошибкой
+                            error_text = await resp.text()
+                            raise RuntimeError(f"Gemini API сдох окончательно [{resp.status}]: {error_text}")
 
-                data = await resp.json()
+                    # Если ошибка другая (например 400 Bad Request) - падаем сразу
+                    if not resp.ok:
+                        error_text = await resp.text()
+                        raise RuntimeError(f"Gemini API Error [{resp.status}]: {error_text}")
 
-                try:
-                    text_response = data["candidates"][0]["content"]["parts"][0]["text"]
-                    usage = data.get("usageMetadata", {})
-                    return {"content": text_response, "prompt_tokens": usage.get("promptTokenCount", 0), "completion_tokens": usage.get("candidatesTokenCount", 0)}
-                except (KeyError, IndexError) as e:
-                    raise RuntimeError(f"Ошибка парсинга ответа: {data}") from e
+                    # Если всё чётко (200 OK) — выходим из цикла
+                    data = await resp.json()
+                    break
 
-        except TimeoutError:
-            raise RuntimeError("Таймаут: Гугл не ответил за 15 секунд. Завод стоит.")
+            # Парсим ответ
+            try:
+                text_response = data["candidates"][0]["content"]["parts"][0]["text"]
+                usage = data.get("usageMetadata", {})
 
-    # 4. Не забываем глушить мотор при выходе
-    async def close(self) -> None:
-        if self._session and not self._session.closed:
-            await self._session.close()
+                return {"content": text_response, "prompt_tokens": usage.get("promptTokenCount", 0), "completion_tokens": usage.get("candidatesTokenCount", 0)}
+            except (KeyError, IndexError) as e:
+                raise RuntimeError(f"Ошибка парсинга ответа Gemini: {data}") from e

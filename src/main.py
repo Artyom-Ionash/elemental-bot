@@ -8,10 +8,10 @@ from dotenv import load_dotenv
 
 from core.discord.guards import is_messageable
 from core.discord.logger import DiscordHandler
-
-# [ОБНОВЛЕНИЕ]: Подключаем наш новый двигатель
 from core.integrations.gemini import GeminiClient
 from core.types.llm import MessageParam
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -29,18 +29,25 @@ class ElementalBot(discord.Client):
         self.llm_client: GeminiClient | None = None
 
     async def setup_hook(self) -> None:
-        # [ОБНОВЛЕНИЕ]: Берем ключ Gemini
         api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY не задан в окружении")
+        log_channel_id = os.getenv("DISCORD_LOG_CHANNEL_ID")
+        if not api_key or not log_channel_id:
+            raise ValueError("GEMINI_API_KEY или DISCORD_LOG_CHANNEL_ID не задан в окружении")
 
         self.llm_client = GeminiClient(api_key=api_key)
 
         # Запуск вахтера (Web Server)
         self.loop.create_task(start_web_server())
 
-        handler = DiscordHandler(self, 1491418361085821092)  # ID твоего канала
-        logging.getLogger("discord").addHandler(handler)
+        # Настраиваем общий логгер проекта
+        root_logger = logging.getLogger()
+        root_logger.setLevel(logging.INFO)
+
+        handler = DiscordHandler(self, int(log_channel_id))
+        formatter = logging.Formatter("%(name)s: %(message)s")
+        handler.setFormatter(formatter)
+
+        root_logger.addHandler(handler)
 
 
 bot = ElementalBot()
@@ -60,12 +67,12 @@ async def start_web_server() -> None:
     # Строго 0.0.0.0 и порт 7860
     site = web.TCPSite(runner, "0.0.0.0", 7860)
     await site.start()
-    print("Веб-сервер поднят в асинхронном контуре на 7860.")
+    logger.info("Веб-сервер поднят в асинхронном контуре на 7860.")
 
 
 @bot.event
 async def on_ready() -> None:
-    print(f"{bot.user} на связи. Жду приказов.")
+    logger.info("%s на связи. Жду приказов.", bot.user)
 
 
 @bot.event
@@ -97,7 +104,11 @@ async def on_message(message: discord.Message) -> None:
     if not user_request:
         user_request = "Проанализируй переписку выше:"
 
-    system_prompt = "Ты — суровый инженер Стихиал. Обращайся ко мне на ты. Отвечай коротко и по делу, как мужик. Взвешивай плюсы и минусы, но отвечай компактно. Сопровождай ответы сжатым описанием своих действий, общайся как реальный человек."
+    system_prompt = (
+        "Ты — суровый инженер Стихиал. Обращайся ко мне на ты. Отвечай коротко и по делу, как мужик, одним абзацем,"
+        "пока речь не заходит об алгоритмах или сравнении явным образом. Взвешивай плюсы и минусы, но отвечай компактно."
+        "Сопровождай ответы сжатым описанием своих действий, общайся как реальный человек."
+    )
     base_prompt_text = f"{user_request}\n\n--- КОНТЕКСТ ИЗ ЧАТА ---\n"
 
     base_tokens = len(encoding.encode(system_prompt + base_prompt_text))
@@ -137,7 +148,7 @@ async def on_message(message: discord.Message) -> None:
             response_data = await bot.llm_client.create_completion(
                 model=current_model,
                 messages=messages,
-                temperature=0.3,
+                temperature=0.2,
             )
 
             # --- 5. ОБРАБОТКА ОТВЕТА ---
