@@ -1,5 +1,6 @@
 import logging
 import os
+import traceback
 
 import discord
 import tiktoken
@@ -148,7 +149,7 @@ async def on_message(message: discord.Message) -> None:
             response_data = await bot.llm_client.create_completion(
                 model=current_model,
                 messages=messages,
-                temperature=0.2,
+                temperature=1.0,
             )
 
             # --- 5. ОБРАБОТКА ОТВЕТА ---
@@ -174,8 +175,18 @@ async def on_message(message: discord.Message) -> None:
                     else:
                         await channel.send(part)
 
-        except Exception as e:
-            await message.reply(f"**[Error]** Архитектурный сбой: {e}")
+        except Exception:
+            # Снимаем полный слепок аварии
+            error_tb = traceback.format_exc()
+
+            # 1. Отправляем полный лог в админский канал (через твой DiscordHandler)
+            logger.error(f"Критический сбой при обработке сообщения!\nПользователь: {message.author}\nОшибка:\n{error_tb}")
+
+            # 2. Юзеру отдаем спокойную заглушку, чтоб не пугать кишками кода
+            try:
+                await message.reply("⚙️ **Система словила перегруз.** Датчики зафиксировали сбой, логи ушли инженеру. Попробуй ещё раз через пару минут.")
+            except discord.errors.Forbidden:
+                pass  # Если даже ответить не можем - просто глотаем
 
 
 if __name__ == "__main__":
