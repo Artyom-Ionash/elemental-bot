@@ -1,3 +1,4 @@
+import logging
 import os
 
 import discord
@@ -6,7 +7,10 @@ from aiohttp import web
 from dotenv import load_dotenv
 
 from core.discord.guards import is_messageable
-from core.integrations.openrouter import OpenRouterClient
+from core.discord.logger import DiscordHandler
+
+# [ОБНОВЛЕНИЕ]: Подключаем наш новый двигатель
+from core.integrations.gemini import GeminiClient
 from core.types.llm import MessageParam
 
 load_dotenv()
@@ -22,18 +26,21 @@ class ElementalBot(discord.Client):
         intents.message_content = True
         super().__init__(intents=intents, activity=discord.CustomActivity(name="Исследование"))
 
-        # Зависимость теперь ссылается на наш собственный адаптер, а не на чужой SDK
-        self.llm_client: OpenRouterClient | None = None
+        self.llm_client: GeminiClient | None = None
 
     async def setup_hook(self) -> None:
-        api_key = os.getenv("OPENROUTER_API_KEY")
+        # [ОБНОВЛЕНИЕ]: Берем ключ Gemini
+        api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
-            raise ValueError("OPENROUTER_API_KEY не задан в окружении")
+            raise ValueError("GEMINI_API_KEY не задан в окружении")
 
-        self.llm_client = OpenRouterClient(api_key=api_key)
+        self.llm_client = GeminiClient(api_key=api_key)
 
-        # 2. Запуск вахтера (Web Server)
+        # Запуск вахтера (Web Server)
         self.loop.create_task(start_web_server())
+
+        handler = DiscordHandler(self, 1491418361085821092)  # ID твоего канала
+        logging.getLogger("discord").addHandler(handler)
 
 
 bot = ElementalBot()
@@ -42,7 +49,7 @@ bot = ElementalBot()
 # --- 1. Асинхронный вахтер ---
 async def health_check(request: web.Request) -> web.Response:
     # Инспектор от Hugging Face придет сюда
-    return web.Response(text="Bot is alive.")
+    return web.Response(text="Bot is alive. Running on Gemini.")
 
 
 async def start_web_server() -> None:
@@ -79,21 +86,18 @@ async def on_message(message: discord.Message) -> None:
 
     channel = message.channel
 
-    # [КРИСТАЛЛ ТИПИЗАЦИИ]: Применяем наш кастомный Type Guard.
-    # Mypy теперь на 100% уверен, что channel имеет тип Messageable,
-    # и больше не будет подчёркивать вызов `.history()` красным.
     if not is_messageable(channel):
         return
 
     # --- 2. ПОДГОТОВКА КОНТЕКСТА ---
 
-    current_model = "openai/gpt-4o-mini"
+    current_model = "gemini-3.1-flash-lite-preview"
 
     user_request = message.content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
     if not user_request:
         user_request = "Проанализируй переписку выше:"
 
-    system_prompt = "Ты — суровый инженер. Обращайся ко мне на ты. Отвечай коротко и по делу, как мужик. Взвешивай плюсы и минусы."
+    system_prompt = "Ты — суровый инженер Стихиал. Обращайся ко мне на ты. Отвечай коротко и по делу, как мужик. Взвешивай плюсы и минусы, но отвечай компактно. Сопровождай ответы сжатым описанием своих действий, общайся как реальный человек."
     base_prompt_text = f"{user_request}\n\n--- КОНТЕКСТ ИЗ ЧАТА ---\n"
 
     base_tokens = len(encoding.encode(system_prompt + base_prompt_text))
@@ -106,7 +110,6 @@ async def on_message(message: discord.Message) -> None:
     async with channel.typing():
         # --- 3. ИЗВЛЕЧЕНИЕ ИСТОРИИ ---
 
-        # Ошибок типов больше нет.
         async for msg in channel.history(limit=500, before=message):
             msg_line = f"{msg.author.name}: {msg.content}\n"
             msg_tokens = len(encoding.encode(msg_line))
@@ -125,13 +128,13 @@ async def on_message(message: discord.Message) -> None:
         # --- 4. ЗАПРОС К LLM ---
 
         try:
-            # Вызываем наш чистый интерфейс
             messages: list[MessageParam] = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": final_prompt},
             ]
 
-            response = await bot.llm_client.create_completion(
+            # [ОБНОВЛЕНИЕ]: Принимаем унифицированный словарь от Gemini
+            response_data = await bot.llm_client.create_completion(
                 model=current_model,
                 messages=messages,
                 temperature=0.3,
@@ -139,15 +142,13 @@ async def on_message(message: discord.Message) -> None:
 
             # --- 5. ОБРАБОТКА ОТВЕТА ---
 
-            usage = response.usage
-            usage_info = f"Tokens: {usage.prompt_tokens}+{usage.completion_tokens}" if usage else "N/A"
+            p_tokens = response_data.get("prompt_tokens", 0)
+            c_tokens = response_data.get("completion_tokens", 0)
+            usage_info = f"Tokens: {p_tokens}+{c_tokens}"
 
             debug_info = f"**[{current_model} | Msgs: {message_count} | {usage_info}]**"
 
-            bot_answer = "..."
-            if response.choices and response.choices[0].message.content:
-                bot_answer = response.choices[0].message.content
-
+            bot_answer = response_data.get("content", "...")
             full_response = f"{debug_info}\n\n{bot_answer}"
 
             # --- 6. ДОСТАВКА ---
