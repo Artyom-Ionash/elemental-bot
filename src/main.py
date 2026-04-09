@@ -9,11 +9,10 @@ from aiohttp import web
 from dotenv import load_dotenv
 
 from core.discord.guards import is_messageable
-from core.discord.logger import DiscordHandler
 from core.integrations.gemini import GeminiClient
 from core.types.llm import MessageParam
 
-logging.getLogger("discord.gateway").setLevel(logging.WARNING)
+# logging.getLogger("discord.gateway").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 load_dotenv()
 
@@ -34,22 +33,19 @@ class ElementalBot(discord.Client):
         api_key = os.getenv("GEMINI_API_KEY")
         log_channel_id = os.getenv("DISCORD_LOG_CHANNEL_ID")
         if not api_key or not log_channel_id:
-            raise ValueError("GEMINI_API_KEY или DISCORD_LOG_CHANNEL_ID не задан в окружении")
+            raise ValueError("GEMINI_API_KEY или DISCORD_LOG_CHANNEL_ID не задан")
 
         self.llm_client = GeminiClient(api_key=api_key)
 
-        # Запуск вахтера (Web Server)
+        # Запуск веб-сервера
         self.loop.create_task(start_web_server())
 
-        # Настраиваем общий логгер проекта
-        root_logger = logging.getLogger()
-        root_logger.setLevel(logging.INFO)
+        # Инициализация централизованного логгера
+        from core.discord.logger import setup_logging
 
-        handler = DiscordHandler(self, int(log_channel_id))
-        formatter = logging.Formatter("%(name)s: %(message)s")
-        handler.setFormatter(formatter)
+        setup_logging(self, int(log_channel_id))
 
-        root_logger.addHandler(handler)
+        logger.info("Система инициализирована. База на месте.")
 
 
 bot = ElementalBot()
