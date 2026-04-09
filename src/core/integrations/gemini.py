@@ -31,6 +31,11 @@ class GeminiClient:
             temperature=temperature,
             system_instruction=system_instruction,
             thinking_config=types.ThinkingConfig(include_thoughts=True, thinking_level=types.ThinkingLevel.HIGH),
+            tools=[
+                # Платные (https://ai.google.dev/gemini-api/docs/google-search):
+                # types.Tool(google_search=types.GoogleSearch()),
+                # types.Tool(google_search_retrieval=types.GoogleSearchRetrieval()),
+            ],
         )
 
         try:
