@@ -1,5 +1,4 @@
 import io
-import json
 import logging
 
 import discord
@@ -28,14 +27,26 @@ class DiscordHandler(logging.Handler):
             self.bot.loop.create_task(self.send_file(discord_file, msg))
         else:
             # Обычный текстовый лог (JSON для читаемости админом)
-            log_entry = {"level": record.levelname, "module": record.name, "msg": record.getMessage()}
-            message = f"```json\n{json.dumps(log_entry, indent=2, ensure_ascii=False)}\n```"
+            level = record.levelname
+            module = record.name
+            msg = record.getMessage()
+            message = f"[`{level}`]\t**{module}**\n```log\n{msg}\n```"
             self.bot.loop.create_task(self.send_log(message))
 
     async def send_log(self, message: str) -> None:
         channel = self.bot.get_channel(self.channel_id)
         if channel:
-            await channel.send(message)
+            if len(message) <= 1900:
+                # Если ответ компактный — шлем текстом, не грузим систему
+                await channel.send(message)
+            else:
+                # Если портянка большая — упаковываем в файл
+                # Использование BytesIO позволяет создать файл в памяти, не мусоря на диске
+                file_bytes = io.BytesIO(message.encode("utf-8"))
+                discord_file = discord.File(fp=file_bytes, filename="response.md")
+
+                # Добавляем короткий заголовок, чтобы было ясно, что внутри
+                await channel.send("Журнал слишком длинный, держи файлом:", file=discord_file)
 
     async def send_file(self, file: discord.File, content: str) -> None:
         channel = self.bot.get_channel(self.channel_id)
