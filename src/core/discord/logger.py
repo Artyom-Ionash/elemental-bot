@@ -1,3 +1,4 @@
+import io
 import json
 import logging
 
@@ -11,27 +12,50 @@ class DiscordHandler(logging.Handler):
         self.channel_id = channel_id
 
     def emit(self, record: logging.LogRecord) -> None:
-        # Структурируем лог в JSON для парсинга
-        log_entry = {"level": record.levelname, "module": record.name, "msg": record.getMessage()}
-        message = f"```json\n{json.dumps(log_entry, indent=2, ensure_ascii=False)}\n```"
-        self.bot.loop.create_task(self.send_log(message))
+        # ЖЕСТКАЯ ФИЛЬТРАЦИЯ
+        if record.levelno < self.level:
+            return
+
+        # Проверяем, передал ли инженер данные для файла через параметр 'extra'
+        file_content = getattr(record, "file_content", None)
+        file_name = getattr(record, "file_name", "dump.md")
+
+        if file_content:
+            # Упаковываем строку в байты и создаем discord.File прямо здесь
+            file_bytes = io.BytesIO(file_content.encode("utf-8"))
+            discord_file = discord.File(fp=file_bytes, filename=file_name)
+            msg = f"🛠 **[{record.levelname}]** {record.name}: {record.getMessage()}"
+            self.bot.loop.create_task(self.send_file(discord_file, msg))
+        else:
+            # Обычный текстовый лог (JSON для читаемости админом)
+            log_entry = {"level": record.levelname, "module": record.name, "msg": record.getMessage()}
+            message = f"```json\n{json.dumps(log_entry, indent=2, ensure_ascii=False)}\n```"
+            self.bot.loop.create_task(self.send_log(message))
 
     async def send_log(self, message: str) -> None:
         channel = self.bot.get_channel(self.channel_id)
         if channel:
             await channel.send(message)
 
+    async def send_file(self, file: discord.File, content: str) -> None:
+        channel = self.bot.get_channel(self.channel_id)
+        if channel:
+            await channel.send(content=content, file=file)
+
 
 def setup_logging(bot: discord.Client, log_channel_id: int) -> None:
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
+    logging.getLogger("discord").propagate = False
 
-    # Хендлер для консоли
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)  # Root видит всё
+
+    # 1. Консоль: INFO и выше (нам не надо видеть каждое шевеление отладки)
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+    console_handler.setLevel(logging.INFO)
     root_logger.addHandler(console_handler)
 
-    # Хендлер для Дискорда
+    # 2. Дискорд: ТОЛЬКО ОШИБКИ (ERROR и CRITICAL)
     discord_handler = DiscordHandler(bot, log_channel_id)
-    discord_handler.setLevel(logging.ERROR)  # В Дискорд только ошибки!
+    discord_handler.setLevel(logging.ERROR)  # ЗДЕСЬ ЖЕСТКИЙ ЗАМОР
     root_logger.addHandler(discord_handler)
