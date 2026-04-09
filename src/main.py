@@ -13,8 +13,8 @@ from core.discord.logger import DiscordHandler
 from core.integrations.gemini import GeminiClient
 from core.types.llm import MessageParam
 
+logging.getLogger("discord.gateway").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
-
 load_dotenv()
 
 MAX_TOKENS = 10000
