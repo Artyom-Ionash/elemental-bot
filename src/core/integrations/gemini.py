@@ -1,4 +1,6 @@
+import asyncio
 import logging
+import traceback
 from collections.abc import Iterable
 from typing import Any
 
@@ -38,32 +40,58 @@ class GeminiClient:
             ],
         )
 
-        try:
-            # SDK сам делает retry внутри. Если сдох — вернет исключение.
-            response = await self.client.aio.models.generate_content(
-                model=target_model,
-                contents=contents,
-                config=config,
-            )
-        except Exception as e:
-            # Пытаемся вытянуть детали, если это API-ошибка
-            if hasattr(e, "response"):
-                # Официальный SDK прокидывает response объект
-                resp = e.response
-                logger.error("API Error | Status: %s | Request-ID: %s | Error: %s", resp.status_code if hasattr(resp, "status_code") else "Unknown", resp.headers.get("x-goog-request-id", "N/A"), e)
-            else:
-                # Если это не API-ошибка, а твой косяк в логике или сеть
-                logger.error("System/Network Error: %s\n%s", e, traceback.format_exc())
+        # Преодоление ошибки 503
 
-            raise RuntimeError(f"Контур управления не ответил: {e}")
+        max_retries = 4
+        base_delay = 2
+
+        for attempt in range(max_retries):
+            try:
+                response = await self.client.aio.models.generate_content(
+                    model=target_model,
+                    contents=contents,
+                    config=config,
+                )
+                break  # Пробили стену, выходим из цикла
+            except Exception as e:
+                error_str = str(e)
+                # [ОБНОВЛЕНИЕ]: Добавляем обрывы связи и тайм-ауты в список того, что нужно терпеть
+                retriable_errors = ["503", "Server disconnected", "TimeoutError", "ClientConnectorError"]
+
+                if any(err in error_str for err in retriable_errors):
+                    if attempt < max_retries - 1:
+                        sleep_time = base_delay * (2**attempt)
+                        logger.warning("Сбой на линии (%s). Ждем %s сек. Попытка %s/%s", type(e).__name__, sleep_time, attempt + 1, max_retries)
+                        await asyncio.sleep(sleep_time)
+                        continue
+
+                # Если ошибка другая (например, кривой токен) или попытки кончились — падаем
+                if hasattr(e, "response") and e.response:  # type: ignore
+                    resp = e.response  # type: ignore
+                    logger.error(
+                        "API Error | Status: %s | Request-ID: %s | Error: %s",
+                        getattr(resp, "status_code", "Unknown"),
+                        resp.headers.get("x-goog-request-id", "N/A") if hasattr(resp, "headers") else "N/A",
+                        e,
+                    )
+                else:
+                    logger.error("System/Network Error: %s\n%s", e, traceback.format_exc())
+
+                raise RuntimeError(f"Контур управления не ответил: {e}")
 
         # Парсинг
         thought_text = ""
         answer_text = ""
-        for part in response.candidates[0].content.parts:
-            if part.thought:
-                thought_text += part.text or ""
-            else:
-                answer_text += part.text or ""
 
-        return {"content": answer_text, "thoughts": thought_text, "prompt_tokens": response.usage_metadata.prompt_token_count, "completion_tokens": response.usage_metadata.candidates_token_count}
+        # Безопасный парсинг, чтобы не словить IndexError, если ответ пустой
+        if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
+            for part in response.candidates[0].content.parts:
+                if getattr(part, "thought", False):
+                    thought_text += part.text or ""
+                else:
+                    answer_text += part.text or ""
+
+        p_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) if response.usage_metadata else 0
+        c_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) if response.usage_metadata else 0
+
+        return {"content": answer_text, "thoughts": thought_text, "prompt_tokens": p_tokens, "completion_tokens": c_tokens}
