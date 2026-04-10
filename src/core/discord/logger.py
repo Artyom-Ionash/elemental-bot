@@ -68,5 +68,5 @@ def setup_logging(bot: discord.Client, log_channel_id: int) -> None:
 
     # 2. Дискорд: ТОЛЬКО ОШИБКИ (ERROR и CRITICAL)
     discord_handler = DiscordHandler(bot, log_channel_id)
-    discord_handler.setLevel(logging.ERROR)  # ЗДЕСЬ ЖЕСТКИЙ ЗАМОР
+    discord_handler.setLevel(logging.WARNING)  # ЗДЕСЬ ЖЕСТКИЙ ЗАМОР
     root_logger.addHandler(discord_handler)
