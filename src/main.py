@@ -1,7 +1,25 @@
 import io
 import logging
 import os
+import socket
 import traceback
+from typing import Any
+
+# --- 0. СЕТЕВОЙ ПАТЧ ДЛЯ HUGGING FACE SPACES ---
+# Cloudflare (защита Discord) часто сбрасывает соединения с IPv6-адресов облачных дата-центров,
+# что приводит к ConnectionResetError во время SSL Handshake.
+# Данный хак принудительно заставляет aiohttp использовать IPv4.
+_original_getaddrinfo = socket.getaddrinfo
+
+
+def _ipv4_getaddrinfo(*args: Any, **kwargs: Any) -> list[Any]:
+    responses = _original_getaddrinfo(*args, **kwargs)
+    ipv4_responses = [res for res in responses if res[0] == socket.AF_INET]
+    return ipv4_responses or responses
+
+
+socket.getaddrinfo = _ipv4_getaddrinfo  # type: ignore
+# ------------------------------------------------
 
 import discord
 import tiktoken
