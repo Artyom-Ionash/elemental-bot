@@ -3,6 +3,8 @@ import logging
 
 import discord
 
+from core.discord.guards import is_messageable
+
 
 class DiscordHandler(logging.Handler):
     def __init__(self, bot: discord.Client, channel_id: int) -> None:
@@ -35,7 +37,7 @@ class DiscordHandler(logging.Handler):
 
     async def send_log(self, message: str) -> None:
         channel = self.bot.get_channel(self.channel_id)
-        if channel:
+        if is_messageable(channel):
             if len(message) <= 1900:
                 # Если ответ компактный — шлем текстом, не грузим систему
                 await channel.send(message)
@@ -50,7 +52,7 @@ class DiscordHandler(logging.Handler):
 
     async def send_file(self, file: discord.File, content: str) -> None:
         channel = self.bot.get_channel(self.channel_id)
-        if channel:
+        if is_messageable(channel):
             await channel.send(content=content, file=file)
 
 
