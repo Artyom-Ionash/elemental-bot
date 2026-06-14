@@ -5,7 +5,7 @@ import socket
 import traceback
 from typing import Any
 
-# --- 0. СЕТЕВОЙ ПАТЧ ДЛЯ HUGGING FACE SPACES ---
+# --- 0. СЕТЕВОЙ ПАТЧ ДЛЯ HUGGING FACE SPACES / ОБЛАКОВ ---
 # Cloudflare (защита Discord) часто сбрасывает соединения с IPv6-адресов облачных дата-центров,
 # что приводит к ConnectionResetError во время SSL Handshake.
 # Данный хак принудительно заставляет aiohttp использовать IPv4.
@@ -70,7 +70,7 @@ bot = ElementalBot()
 
 # --- 1. Асинхронный вахтер ---
 async def health_check(request: web.Request) -> web.Response:
-    # Инспектор от Hugging Face придет сюда
+    # Инспектор от Hugging Face или Render придет сюда
     return web.Response(text="Bot is alive. Running on Gemini.")
 
 
@@ -79,10 +79,14 @@ async def start_web_server() -> None:
     app.router.add_get("/", health_check)
     runner = web.AppRunner(app)
     await runner.setup()
-    # Строго 0.0.0.0 и порт 7860
-    site = web.TCPSite(runner, "0.0.0.0", 7860)
+
+    # [ОБНОВЛЕНИЕ]: Поддержка динамического порта для совместимости с Render и Hugging Face.
+    # Если переменная PORT не задана, по умолчанию используется порт 7860.
+    port = int(os.getenv("PORT", "7860"))
+
+    site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    logger.info("Веб-сервер поднят в асинхронном контуре на 7860.")
+    logger.info("Веб-сервер поднят в асинхронном контуре на порту %d.", port)
 
 
 @bot.event
