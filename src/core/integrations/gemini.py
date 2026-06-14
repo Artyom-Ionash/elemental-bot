@@ -2,12 +2,11 @@ import asyncio
 import logging
 import traceback
 from collections.abc import Iterable
-from typing import Any
 
 from google import genai
-from google.genai import types
+from google.genai import errors, types
 
-from core.types.llm import MessageParam
+from core.types.llm import CompletionResult, MessageParam
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +21,7 @@ class GeminiClient:
         messages: Iterable[MessageParam],
         model: str | None = None,
         temperature: float = 0.3,
-    ) -> dict[str, Any]:
+    ) -> CompletionResult:
 
         target_model = model or self.model_name
         contents = [types.Content(role="user" if msg["role"] == "user" else "model", parts=[types.Part.from_text(text=msg["content"])]) for msg in messages if msg["role"] != "system"]
@@ -44,18 +43,28 @@ class GeminiClient:
 
         max_retries = 4
         base_delay = 2
+        response: types.GenerateContentResponse | None = None
 
         for attempt in range(max_retries):
             try:
-                response = await self.client.aio.models.generate_content(
+                # Избегаем предупреждения "partially unknown" на уровне вызова SDK с помощью точечного игнорирования.
+                # При этом возвращаемый тип response остается полностью и строго типизированным.
+                response = await self.client.aio.models.generate_content(  # type: ignore[reportUnknownMemberType]
                     model=target_model,
                     contents=contents,
                     config=config,
                 )
                 break  # Пробили стену, выходим из цикла
+            except errors.APIError as e:
+                logger.error(
+                    "API Error | Status: %s | Error: %s",
+                    str(e.code),
+                    str(e),
+                )
+                raise RuntimeError(f"Контур управления не ответил: {e}") from e
             except Exception as e:
                 error_str = str(e)
-                # [ОБНОВЛЕНИЕ]: Добавляем обрывы связи и тайм-ауты в список того, что нужно терпеть
+                # Добавляем обрывы связи и тайм-ауты в список того, что нужно терпеть
                 retriable_errors = ["503", "Server disconnected", "TimeoutError", "ClientConnectorError"]
 
                 if any(err in error_str for err in retriable_errors):
@@ -65,19 +74,12 @@ class GeminiClient:
                         await asyncio.sleep(sleep_time)
                         continue
 
-                # Если ошибка другая (например, кривой токен) или попытки кончились — падаем
-                if hasattr(e, "response") and e.response:  # type: ignore
-                    resp = e.response  # type: ignore
-                    logger.error(
-                        "API Error | Status: %s | Request-ID: %s | Error: %s",
-                        getattr(resp, "status_code", "Unknown"),
-                        resp.headers.get("x-goog-request-id", "N/A") if hasattr(resp, "headers") else "N/A",
-                        e,
-                    )
-                else:
-                    logger.error("System/Network Error: %s\n%s", e, traceback.format_exc())
+                # Системная или сетевая ошибка общего характера
+                logger.error("System/Network Error: %s\n%s", e, traceback.format_exc())
+                raise RuntimeError(f"Контур управления не ответил: {e}") from e
 
-                raise RuntimeError(f"Контур управления не ответил: {e}")
+        if response is None:
+            raise RuntimeError("Контур управления вернул пустой ответ")
 
         # Парсинг
         thought_text = ""
@@ -94,4 +96,9 @@ class GeminiClient:
         p_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) if response.usage_metadata else 0
         c_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) if response.usage_metadata else 0
 
-        return {"content": answer_text, "thoughts": thought_text, "prompt_tokens": p_tokens, "completion_tokens": c_tokens}
+        return {
+            "content": answer_text,
+            "thoughts": thought_text,
+            "prompt_tokens": p_tokens,
+            "completion_tokens": c_tokens,
+        }
