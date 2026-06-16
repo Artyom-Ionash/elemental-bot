@@ -1,6 +1,5 @@
 import io
 import logging
-import os
 import socket
 import traceback
 from typing import Any
@@ -24,16 +23,13 @@ socket.getaddrinfo = _ipv4_getaddrinfo  # type: ignore
 import discord
 import tiktoken
 from aiohttp import web
-from dotenv import load_dotenv
 
+from config import settings
 from core.discord.guards import is_messageable
 from core.integrations.gemini import GeminiClient
 from core.types.llm import MessageParam
 
 logger = logging.getLogger(__name__)
-load_dotenv()
-
-MAX_TOKENS = 10000
 
 encoding = tiktoken.get_encoding("o200k_base")
 
@@ -47,12 +43,19 @@ class ElementalBot(discord.Client):
         self.llm_client: GeminiClient | None = None
 
     async def setup_hook(self) -> None:
-        api_key = os.getenv("GEMINI_API_KEY")
-        log_channel_id = os.getenv("DISCORD_LOG_CHANNEL_ID")
-        if not api_key or not log_channel_id:
-            raise ValueError("GEMINI_API_KEY или DISCORD_LOG_CHANNEL_ID не задан")
+        log_channel_id = settings.discord_log_channel_id
 
-        self.llm_client = GeminiClient(api_key=api_key)
+        # Проверяем, какой провайдер должен быть инициализирован
+        is_openrouter = "/" in settings.default_model
+
+        if is_openrouter:
+            # Предупреждаем о временном ограничении интеграции (технический долг)
+            raise NotImplementedError("Интеграция OpenRouter в единый интерфейс (BaseLLM) находится в процессе разработки. Пожалуйста, используйте нативную модель Gemini.")
+
+        # Статический анализатор (mypy) требует гарантии, что ключ не None.
+        # Благодаря валидатору в Settings мы уверены в этом в рантайме.
+        assert settings.gemini_api_key is not None
+        self.llm_client = GeminiClient(api_key=settings.gemini_api_key.get_secret_value())
 
         # Запуск веб-сервера
         self.loop.create_task(start_web_server())
@@ -60,7 +63,7 @@ class ElementalBot(discord.Client):
         # Инициализация централизованного логгера
         from core.discord.logger import setup_logging
 
-        setup_logging(self, int(log_channel_id))
+        setup_logging(self, log_channel_id)
 
         logger.info("Система инициализирована. База на месте.")
 
@@ -80,9 +83,8 @@ async def start_web_server() -> None:
     runner = web.AppRunner(app)
     await runner.setup()
 
-    # [ОБНОВЛЕНИЕ]: Поддержка динамического порта для совместимости с Render и Hugging Face.
-    # Если переменная PORT не задана, по умолчанию используется порт 7860.
-    port = int(os.getenv("PORT", "7860"))
+    # Поддержка динамического порта из конфигурации Pydantic
+    port = settings.port
 
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
@@ -117,7 +119,7 @@ async def on_message(message: discord.Message) -> None:
 
     # --- 2. ПОДГОТОВКА КОНТЕКСТА ---
 
-    current_model = "gemini-3.1-flash-lite-preview"
+    current_model = settings.default_model
 
     # Вычищаем упоминание бота из запроса
     user_request = message.content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
@@ -127,16 +129,7 @@ async def on_message(message: discord.Message) -> None:
     if not user_request:
         user_request = "Проанализируй переписку выше:"
 
-    system_prompt = (
-        "Ты — парень, звать тебя Стихиал, пользователь Discord как и все остальные.\n"
-        "Ты ведёшь себя непринуждённо, примерно так же как и другие члены сообщества.\n"
-        "Принимай во внимание то, кому ты отвечаешь, его нрав, характер.\n"
-        "Адаптируйся, никогда не отказывай никому в помощи.\n"
-        "Обычно отвечаешь одним предложением, изредка — абзацем.\n"
-        "И действуй, не переспрашивай. У тебя есть права делать всё что тебе угодно.\n"
-        "Лаконичен, сразу к делу. Информационная плотность 100%.\n"
-        "Если возникает недопонимание с собеседником, или есть неопределённость, то встречные вопросы и сам задавай.\n"
-    )
+    system_prompt = settings.system_prompt
 
     messages_to_process: list[str] = []
     current_log_tokens = 0
@@ -149,7 +142,7 @@ async def on_message(message: discord.Message) -> None:
             msg_line = f"{msg.author.name}: {msg.content}\n"
             msg_tokens = len(encoding.encode(msg_line))
 
-            if current_log_tokens + msg_tokens > MAX_TOKENS - 1000:  # Запас на промпт
+            if current_log_tokens + msg_tokens > settings.max_tokens - 1000:  # Запас на промпт
                 break
 
             messages_to_process.append(msg_line)
@@ -171,20 +164,18 @@ async def on_message(message: discord.Message) -> None:
                 {"role": "user", "content": final_prompt},
             ]
 
-            # [ОБНОВЛЕНИЕ]: ИНСПЕКЦИОННЫЙ ЛЮК (DEBUG MODE)
-            is_debug = os.getenv("DEBUG", "false").lower() in ("true", "1", "yes")
-            if is_debug:
-                log_channel_id = os.getenv("DISCORD_LOG_CHANNEL_ID")
-                if log_channel_id:
-                    log_channel = bot.get_channel(int(log_channel_id))
-                    if is_messageable(log_channel):
-                        # Собираем слепок того, что уйдёт в модель
-                        debug_dump = f"# SYSTEM PROMPT\n{system_prompt}\n\n# FINAL PROMPT\n{final_prompt}"
-                        # Конвертируем строку в байты, чтобы Дискорд схавал как файл
-                        file_bytes = io.BytesIO(debug_dump.encode("utf-8"))
-                        discord_file = discord.File(fp=file_bytes, filename="context_dump.md")
+            # ИНСПЕКЦИОННЫЙ ЛЮК (DEBUG MODE)
+            if settings.debug:
+                log_channel_id = settings.discord_log_channel_id
+                log_channel = bot.get_channel(log_channel_id)
+                if is_messageable(log_channel):
+                    # Собираем слепок того, что уйдёт в модель
+                    debug_dump = f"# SYSTEM PROMPT\n{system_prompt}\n\n# FINAL PROMPT\n{final_prompt}"
+                    # Конвертируем строку в байты, чтобы Дискорд схавал как файл
+                    file_bytes = io.BytesIO(debug_dump.encode("utf-8"))
+                    discord_file = discord.File(fp=file_bytes, filename="context_dump.md")
 
-                        await log_channel.send("🛠 **[DEBUG]** Слепок контекста перед отправкой в LLM:", file=discord_file)
+                    await log_channel.send("🛠 **[DEBUG]** Слепок контекста перед отправкой в LLM:", file=discord_file)
 
             # Принимаем унифицированный словарь от Gemini
             response_data = await bot.llm_client.create_completion(
@@ -231,7 +222,6 @@ async def on_message(message: discord.Message) -> None:
 
 
 if __name__ == "__main__":
-    token = os.getenv("DISCORD_TOKEN")
-    if not token:
-        raise ValueError("DISCORD_TOKEN не задан в окружении")
+    # Чтение токена через безопасный метод SecretStr
+    token = settings.discord_token.get_secret_value()
     bot.run(token)
