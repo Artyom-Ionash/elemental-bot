@@ -6,12 +6,13 @@ from collections.abc import Iterable
 from google import genai
 from google.genai import errors, types
 
+from core.integrations.base_llm import BaseLLMClient
 from core.types.llm import CompletionResult, MessageParam
 
 logger = logging.getLogger(__name__)
 
 
-class GeminiClient:
+class GeminiClient(BaseLLMClient):
     def __init__(self, api_key: str) -> None:
         self.client = genai.Client(api_key=api_key)
         self.model_name = "gemini-3.1-flash-lite-preview"
