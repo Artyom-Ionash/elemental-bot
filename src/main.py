@@ -5,11 +5,11 @@ import discord
 from telegram.ext import Application, MessageHandler, filters
 
 from config import settings
-from core.discord.guards import is_messageable
-from core.discord.messenger import Messenger
+from core.bot.discord.guards import is_messageable
+from core.bot.discord.messenger import Messenger
+from core.bot.telegram.messenger import TelegramMessenger
 from core.http.server import start_web_server
 from core.integrations.gemini import GeminiClient
-from core.telegram.messenger import TelegramMessenger
 from lib.context_builder import ContextBuilder
 from lib.token_calculator import TokenCalculator
 
