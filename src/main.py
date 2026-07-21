@@ -5,6 +5,7 @@ import discord
 from config import settings
 from core.discord.guards import is_messageable
 from core.discord.messenger import Messenger
+from core.http.server import start_web_server
 from core.integrations.gemini import GeminiClient
 from lib.context_builder import ContextBuilder
 from lib.token_calculator import TokenCalculator
@@ -22,6 +23,8 @@ class ElementalBot(discord.Client):
         self.messenger: Messenger | None = None
 
     async def setup_hook(self) -> None:
+        await start_web_server()
+
         # 1. Инициализация LLM
         assert settings.gemini_api_key is not None
         llm_client = GeminiClient(api_key=settings.gemini_api_key.get_secret_value())
