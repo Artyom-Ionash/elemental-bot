@@ -13,6 +13,7 @@ class Settings(BaseSettings):
 
     discord_token: SecretStr
     discord_log_channel_id: int
+    telegram_token: SecretStr | None = None
     gemini_api_key: SecretStr | None = None
     openrouter_api_key: SecretStr | None = None
 
