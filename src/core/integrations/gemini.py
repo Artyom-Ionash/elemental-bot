@@ -6,16 +6,16 @@ from collections.abc import Iterable
 from google import genai
 from google.genai import errors, types
 
-from core.integrations.base_llm import BaseLLMClient
+from core.integrations.base_provider import BaseLLMProvider
 from core.types.llm import CompletionResult, MessageParam
 
 logger = logging.getLogger(__name__)
 
 
-class GeminiClient(BaseLLMClient):
-    def __init__(self, api_key: str) -> None:
+class GeminiProvider(BaseLLMProvider):
+    def __init__(self, api_key: str, default_model: str = "gemini-3.5-flash-lite-preview") -> None:
         self.client = genai.Client(api_key=api_key)
-        self.model_name = "gemini-3.5-flash-lite-preview"
+        self.default_model = default_model
 
     async def create_completion(
         self,
@@ -24,7 +24,7 @@ class GeminiClient(BaseLLMClient):
         temperature: float = 0.3,
     ) -> CompletionResult:
 
-        target_model = model or self.model_name
+        target_model = model or self.default_model
         contents = [types.Content(role="user" if msg["role"] == "user" else "model", parts=[types.Part.from_text(text=msg["content"])]) for msg in messages if msg["role"] != "system"]
 
         system_instruction = next((m["content"] for m in messages if m["role"] == "system"), None)

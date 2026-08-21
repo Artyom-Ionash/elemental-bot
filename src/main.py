@@ -9,7 +9,8 @@ from core.bot.discord.guards import is_messageable
 from core.bot.discord.messenger import Messenger
 from core.bot.telegram.messenger import TelegramMessenger
 from core.http.server import start_web_server
-from core.integrations.gemini import GeminiClient
+from core.integrations.base_provider import BaseLLMProvider
+from core.integrations.factory import create_llm_provider
 from lib.context_builder import ContextBuilder
 from lib.token_calculator import TokenCalculator
 
@@ -17,10 +18,9 @@ logger = logging.getLogger(__name__)
 
 
 # --- Инициализация общих компонентов ---
-def init_common() -> tuple[GeminiClient, TokenCalculator, ContextBuilder]:
+def init_common() -> tuple[BaseLLMProvider, TokenCalculator, ContextBuilder]:
     """Инициализирует общие компоненты для предотвращения дублирования соединений."""
-    assert settings.gemini_api_key is not None
-    llm_client = GeminiClient(api_key=settings.gemini_api_key.get_secret_value())
+    llm_client = create_llm_provider(settings)
     token_calculator = TokenCalculator()
     context_builder = ContextBuilder(token_calculator=token_calculator, max_tokens=settings.max_tokens)
     return llm_client, token_calculator, context_builder
@@ -28,7 +28,7 @@ def init_common() -> tuple[GeminiClient, TokenCalculator, ContextBuilder]:
 
 # --- Класс Discord Бота ---
 class ElementalBot(discord.Client):
-    def __init__(self, llm_client: GeminiClient, context_builder: ContextBuilder) -> None:
+    def __init__(self, llm_client: BaseLLMProvider, context_builder: ContextBuilder) -> None:
         intents = discord.Intents.default()
         intents.message_content = True
         super().__init__(intents=intents, activity=discord.CustomActivity(name="Исследование"))

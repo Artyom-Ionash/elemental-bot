@@ -6,7 +6,7 @@ from typing import Any
 from telegram import Update
 from telegram.ext import CallbackContext
 
-from core.integrations.base_llm import BaseLLMClient
+from core.integrations.base_provider import BaseLLMProvider
 from lib.token_calculator import TokenCalculator
 
 logger = logging.getLogger(__name__)
@@ -22,7 +22,7 @@ class TelegramMessenger:
 
     def __init__(
         self,
-        llm_client: BaseLLMClient,
+        llm_client: BaseLLMProvider,
         token_calculator: TokenCalculator,
         max_tokens: int,
         system_prompt: str,

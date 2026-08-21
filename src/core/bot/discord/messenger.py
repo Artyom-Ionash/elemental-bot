@@ -6,7 +6,7 @@ import discord
 
 from config import settings
 from core.bot.discord.guards import is_messageable
-from core.integrations.base_llm import BaseLLMClient
+from core.integrations.base_provider import BaseLLMProvider
 from core.types.llm import MessageParam
 from lib.context_builder import ContextBuilder
 
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class Messenger:
-    def __init__(self, bot: discord.Client, llm_client: BaseLLMClient, context_builder: ContextBuilder) -> None:
+    def __init__(self, bot: discord.Client, llm_client: BaseLLMProvider, context_builder: ContextBuilder) -> None:
         self.bot = bot
         self.llm_client = llm_client
         self.context_builder = context_builder
