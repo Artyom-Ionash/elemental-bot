@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class GeminiClient(BaseLLMClient):
     def __init__(self, api_key: str) -> None:
         self.client = genai.Client(api_key=api_key)
-        self.model_name = "gemini-3.1-flash-lite-preview"
+        self.model_name = "gemini-3.5-flash-lite-preview"
 
     async def create_completion(
         self,
