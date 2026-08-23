@@ -16,6 +16,8 @@ templates = Jinja2Templates(directory="src/core/http/templates")
 
 class ModelUpdate(BaseModel):
     model: str = Field(..., description="Название выбранной LLM модели")
+    system_prompt: str = Field(..., description="Системный промпт")
+    context_size: int = Field(..., ge=100, le=1000000, description="Размер контекста (Max Tokens)")
     init_data: str | None = Field(default=None, alias="initData", description="Telegram WebApp initData для верификации")
 
 
@@ -28,10 +30,28 @@ async def health_check() -> dict[str, str]:
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_panel(request: Request) -> HTMLResponse:
     """Отображение панели управления Telegram Mini App."""
+    import socket
+
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        bot_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        try:
+            bot_ip = socket.gethostbyname(socket.gethostname())
+        except Exception:
+            bot_ip = "127.0.0.1"
+
     response: HTMLResponse = templates.TemplateResponse(
         request,
         "admin.html",
-        {"current_model": settings.default_model},
+        {
+            "current_model": settings.default_model,
+            "bot_ip": bot_ip,
+            "system_prompt": settings.system_prompt,
+            "context_size": settings.max_tokens,
+        },
     )
     return response
 
@@ -56,8 +76,21 @@ async def set_model(payload: ModelUpdate) -> JSONResponse:
         )
 
     settings.default_model = target_model
-    logger.info("Модель успешно изменена на %s через панель управления TMA.", target_model)
-    return JSONResponse(content={"status": "success", "model": settings.default_model})
+    settings.system_prompt = payload.system_prompt
+    settings.max_tokens = payload.context_size
+    logger.info(
+        "Настройки успешно обновлены через панель управления TMA: модель=%s, контекст=%d",
+        target_model,
+        payload.context_size,
+    )
+    return JSONResponse(
+        content={
+            "status": "success",
+            "model": settings.default_model,
+            "system_prompt": settings.system_prompt,
+            "context_size": settings.max_tokens,
+        }
+    )
 
 
 async def start_web_server() -> None:

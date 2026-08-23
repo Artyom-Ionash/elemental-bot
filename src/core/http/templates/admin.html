@@ -17,10 +17,22 @@
         </div>
 
         <div class="space-y-4">
-            <!-- Current Model Display -->
+            <!-- Bot IP Display -->
             <div class="bg-gray-700/50 p-4 rounded-xl border border-gray-600/50">
-                <p class="text-sm text-gray-400">Текущая модель</p>
-                <p id="current-model-display" class="text-lg font-semibold text-emerald-400 mt-1">{{ current_model }}</p>
+                <p class="text-sm text-gray-400">IP адрес бота</p>
+                <p class="text-lg font-semibold text-sky-400 mt-1 font-mono">{{ bot_ip }}</p>
+            </div>
+
+            <!-- Context Size Input -->
+            <div class="space-y-2">
+                <label for="context-size-input" class="block text-sm font-medium text-gray-300">Размер контекста (Max Tokens)</label>
+                <input type="number" id="context-size-input" value="{{ context_size }}" min="100" max="1000000" class="w-full bg-gray-700 border border-gray-600 rounded-xl px-4 py-2.5 text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <!-- System Prompt Input -->
+            <div class="space-y-2">
+                <label for="system-prompt-input" class="block text-sm font-medium text-gray-300">Системный промпт</label>
+                <textarea id="system-prompt-input" rows="5" class="w-full bg-gray-700 border border-gray-600 rounded-xl px-4 py-2.5 text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-mono">{{ system_prompt }}</textarea>
             </div>
 
             <!-- Model Selection Form -->
@@ -57,20 +69,35 @@
 
         const saveBtn = document.getElementById('save-btn');
         const modelSelect = document.getElementById('model-select');
-        const currentModelDisplay = document.getElementById('current-model-display');
+        const systemPromptInput = document.getElementById('system-prompt-input');
+        const contextSizeInput = document.getElementById('context-size-input');
         const statusMsg = document.getElementById('status-msg');
 
         // Установка текущего значения в селекте, если оно есть
-        const currentModelText = currentModelDisplay.innerText.trim();
-        for (let option of modelSelect.options) {
-            if (option.value === currentModelText) {
-                modelSelect.value = currentModelText;
-                break;
+        const currentModel = "{{ current_model }}";
+        if (currentModel) {
+            let found = false;
+            for (let option of modelSelect.options) {
+                if (option.value === currentModel) {
+                    modelSelect.value = currentModel;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                const opt = document.createElement('option');
+                opt.value = currentModel;
+                opt.text = currentModel + ' (Current)';
+                modelSelect.add(opt);
+                modelSelect.value = currentModel;
             }
         }
 
         saveBtn.addEventListener('click', async () => {
             const selectedModel = modelSelect.value;
+            const systemPrompt = systemPromptInput.value;
+            const contextSize = parseInt(contextSizeInput.value, 10);
+
             saveBtn.disabled = true;
             saveBtn.innerText = 'Сохранение...';
             statusMsg.classList.add('hidden');
@@ -83,6 +110,8 @@
                     },
                     body: JSON.stringify({
                         model: selectedModel,
+                        system_prompt: systemPrompt,
+                        context_size: contextSize,
                         initData: tg.initData || ''
                     })
                 });
@@ -90,7 +119,6 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    currentModelDisplay.innerText = data.model;
                     statusMsg.innerText = 'Настройки успешно применены!';
                     statusMsg.className = 'text-center text-sm p-3 rounded-xl bg-emerald-900/50 text-emerald-300 border border-emerald-700/50 block';
                     if (tg.HapticFeedback) {

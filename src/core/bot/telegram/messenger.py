@@ -6,6 +6,7 @@ from typing import Any
 from telegram import Update
 from telegram.ext import CallbackContext
 
+from config import settings
 from core.integrations.base_provider import BaseLLMProvider
 from lib.token_calculator import TokenCalculator
 
@@ -24,13 +25,13 @@ class TelegramMessenger:
         self,
         llm_client: BaseLLMProvider,
         token_calculator: TokenCalculator,
-        max_tokens: int,
-        system_prompt: str,
+        max_tokens: int | None = None,
+        system_prompt: str | None = None,
     ) -> None:
         self.llm_client = llm_client
         self.token_calculator = token_calculator
-        self.max_tokens = max_tokens
-        self.system_prompt = system_prompt
+        self._max_tokens = max_tokens
+        self._system_prompt = system_prompt
 
         # Храним историю для каждого чата: chat_id -> list of messages
         # Каждое сообщение: {"author": str, "content": str, "timestamp": float}
@@ -39,6 +40,14 @@ class TelegramMessenger:
 
         # Лимит на количество хранимых сообщений (для предотвращения переполнения)
         self.max_history_size = 200
+
+    @property
+    def max_tokens(self) -> int:
+        return settings.max_tokens if self._max_tokens is None else self._max_tokens
+
+    @property
+    def system_prompt(self) -> str:
+        return settings.system_prompt if self._system_prompt is None else self._system_prompt
 
     async def handle(self, update: Update, context: CallbackContext) -> None:
         if not update.message or not update.message.text:

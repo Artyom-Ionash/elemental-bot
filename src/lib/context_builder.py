@@ -1,12 +1,17 @@
 import discord
 
+from config import settings
 from lib.token_calculator import TokenCalculator
 
 
 class ContextBuilder:
-    def __init__(self, token_calculator: TokenCalculator, max_tokens: int) -> None:
+    def __init__(self, token_calculator: TokenCalculator, max_tokens: int | None = None) -> None:
         self.token_calculator = token_calculator
-        self.max_tokens = max_tokens
+        self._max_tokens = max_tokens
+
+    @property
+    def max_tokens(self) -> int:
+        return settings.max_tokens if self._max_tokens is None else self._max_tokens
 
     async def build_context(self, channel: discord.abc.Messageable, before_message: discord.Message, limit: int = 500) -> tuple[str, int]:
         messages_to_process: list[str] = []
