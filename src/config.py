@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     telegram_token: SecretStr | None = None
     gemini_api_key: SecretStr | None = None
     openrouter_api_key: SecretStr | None = None
+    telegram_admin_id: int | None = None
 
     # Настройки работы бота
     port: int = Field(default=7860, ge=1, le=65535)
