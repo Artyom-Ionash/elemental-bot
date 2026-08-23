@@ -6,13 +6,16 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "discord-py>=2.7.1",
+    "fastapi>=0.115.0",
     "google-genai>=1.71.0",
+    "jinja2>=3.1.5",
     "openai>=2.30.0",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.13.1",
     "python-dotenv>=1.2.2",
     "python-telegram-bot>=22.8",
     "tiktoken>=0.12.0",
+    "uvicorn>=0.34.0",
 ]
 
 [tool.mypy]
