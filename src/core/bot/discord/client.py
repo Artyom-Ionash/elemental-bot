@@ -10,13 +10,15 @@ from lib.context_builder import ContextBuilder
 logger = logging.getLogger(__name__)
 
 
-class ElementalBot(discord.Client):
-    def __init__(self, llm_client: BaseLLMProvider, context_builder: ContextBuilder) -> None:
+class DiscordBot(discord.Client):
+    """Инкапсулирует клиент и обработчики Discord-бота."""
+
+    def __init__(self, token: str, llm_client: BaseLLMProvider, context_builder: ContextBuilder) -> None:
         intents = discord.Intents.default()
         intents.message_content = True
         super().__init__(intents=intents, activity=discord.CustomActivity(name="Исследование"))
 
-        # Передача зависимостей извне
+        self.token = token
         self.llm_client = llm_client
         self.context_builder = context_builder
         self.messenger: Messenger | None = None
@@ -25,10 +27,18 @@ class ElementalBot(discord.Client):
         # Сборка обработчика сообщений с внедренными зависимостями
         self.messenger = Messenger(bot=self, llm_client=self.llm_client, context_builder=self.context_builder)
 
+    async def start_bot(self) -> None:
+        """Запуск Discord клиента с инкапсулированным токеном."""
+        await self.start(self.token)
 
-def setup_discord_client(llm_client: BaseLLMProvider, context_builder: ContextBuilder) -> ElementalBot:
-    """Создает и настраивает экземпляр ElementalBot вместе с обработчиками событий."""
-    bot_discord = ElementalBot(llm_client=llm_client, context_builder=context_builder)
+    async def stop_bot(self) -> None:
+        """Остановка Discord клиента."""
+        await self.close()
+
+
+def setup_discord_client(token: str, llm_client: BaseLLMProvider, context_builder: ContextBuilder) -> DiscordBot:
+    """Создает и настраивает экземпляр DiscordBot вместе с обработчиками событий."""
+    bot_discord = DiscordBot(token=token, llm_client=llm_client, context_builder=context_builder)
 
     @bot_discord.event
     async def on_ready() -> None:
