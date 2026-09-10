@@ -55,13 +55,13 @@ class ModelUpdate(BaseModel):
     init_data: str | None = Field(default=None, alias="initData", description="Telegram WebApp initData для верификации")
 
 
-@app.get("/", response_class=JSONResponse)
+@app.api_route("/", methods=["GET", "HEAD"], response_class=JSONResponse)
 async def health_check() -> dict[str, str]:
     """Эндпоинт для инспекторов от Hugging Face / Render."""
     return {"status": "ok", "message": "Полёт нормальный."}
 
 
-@app.get("/admin", response_class=HTMLResponse)
+@app.api_route("/admin", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def admin_panel(request: Request) -> HTMLResponse:
     """Отображение панели управления Telegram Mini App."""
     response: HTMLResponse = templates.TemplateResponse(
