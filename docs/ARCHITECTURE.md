@@ -17,7 +17,11 @@
     - **Что это:** Обёртки над внешними сервисами (OpenAI, OpenRouter, Discord Gateway).
     - **Цель:** Изоляция внешней нестабильности. Если API изменится, мы меняем код только здесь.
 
-3.  **`core/types/`** (Domain Contracts)
+3.  **`core/resilience/`** (Resilience & Retry Policy)
+    - **Что это:** Модуль отказоустойчивости, содержащий [`RetryPolicy`](src/core/resilience/policy.py:6) и прокси-провайдер [`RetryingLLMProvider`](src/core/resilience/proxy.py:16).
+    - **Цель:** Прозрачное оборачивание любых `BaseLLMProvider` с экспоненциальной задержкой и защитой фазы рукопожатия при стриминге (Stream Handshake Guard).
+
+4.  **`core/types/`** (Domain Contracts)
     - **Что это:** Pydantic-модели и TypedDicts, описывающие структуру данных бота.
     - **Цель:** Обеспечить строгую типизацию данных, передаваемых между модулями.
 
@@ -38,7 +42,7 @@
 ### 2. Domain Logic (`lib/`)
 
 - **Назначение:** Основная логика обработки данных.
-- **Пример:** `lib/context_manager.py` (сбор истории), `lib/token_calculator.py`.
+- **Пример:** [`lib/context_builder.py`](src/lib/context_builder.py:1) (сбор истории), [`lib/token_calculator.py`](src/lib/token_calculator.py:1).
 - **Правила:** Могут использовать `core/primitives/`. **Запрещено** использование JSX (по понятным причинам) и сторонних UI-библиотек.
 
 ---
@@ -49,7 +53,7 @@
 
 Принцип разработки остается неизменным:
 
-1.  **Mining (Exploration):** Быстрая реализация функции в `main.py` или отдельном скрипте.
+1.  **Mining (Exploration):** Быстрая реализация функции в [`main.py`](src/main.py:1) или отдельном скрипте.
 2.  **Refining (Exploitation):** Перенос логики в изолированные функции/классы в `lib/` или `core/`, покрытие их тестами (`pytest`).
 
 ### 2. Dependency Flow (Гравитация зависимостей)
@@ -67,6 +71,10 @@
 
 - **No Any-Type Policy:** Использование `Any` запрещено, за исключением случаев на границе с внешним API (например, при парсинге JSON), сразу после этого данные должны конвертироваться в `BaseModel`.
 - **Type Guards:** Используем функции `isinstance()` и Pydantic `model_validate()`.
+
+### 4. Stream Handshake Guard (Защита фазы рукопожатия стриминга)
+
+При работе с потоковыми ответами (`AsyncGenerator`) логика повторов через [`RetryingLLMProvider`](src/core/resilience/proxy.py:16) обязана защищать **только фазу подключения и получения первого токена** (`anext`). Повторный запуск генератора после получения части ответа приведёт к дублированию текста у клиента.
 
 ---
 

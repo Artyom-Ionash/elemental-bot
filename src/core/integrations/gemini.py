@@ -1,6 +1,4 @@
-import asyncio
 import logging
-import traceback
 from collections.abc import Iterable
 
 from google import genai
@@ -13,6 +11,12 @@ logger = logging.getLogger(__name__)
 
 
 class GeminiProvider(BaseLLMProvider):
+    """Нативный провайдер Gemini.
+
+    Фокусируется исключительно на маппинге API, авторизации и сериализации данных.
+    Логика повторных попыток (Retry) вынесена в прокси-слой ``RetryingLLMProvider``.
+    """
+
     def __init__(self, api_key: str, default_model: str = "gemini-flash-lite-latest") -> None:
         self.client = genai.Client(api_key=api_key)
         self.default_model = default_model
@@ -25,7 +29,14 @@ class GeminiProvider(BaseLLMProvider):
     ) -> CompletionResult:
 
         target_model = model or self.default_model
-        contents = [types.Content(role="user" if msg["role"] == "user" else "model", parts=[types.Part.from_text(text=msg["content"])]) for msg in messages if msg["role"] != "system"]
+        contents = [
+            types.Content(
+                role="user" if msg["role"] == "user" else "model",
+                parts=[types.Part.from_text(text=msg["content"])],
+            )
+            for msg in messages
+            if msg["role"] != "system"
+        ]
 
         system_instruction = next((m["content"] for m in messages if m["role"] == "system"), None)
 
@@ -40,47 +51,22 @@ class GeminiProvider(BaseLLMProvider):
             ],
         )
 
-        # Преодоление ошибки 503
-
-        max_retries = 4
-        base_delay = 2
-        response: types.GenerateContentResponse | None = None
-
-        for attempt in range(max_retries):
-            try:
-                # Избегаем предупреждения "partially unknown" на уровне вызова SDK с помощью точечного игнорирования.
-                # При этом возвращаемый тип response остается полностью и строго типизированным.
-                response = await self.client.aio.models.generate_content(  # type: ignore[reportUnknownMemberType]
-                    model=target_model,
-                    contents=contents,
-                    config=config,
-                )
-                break  # Пробили стену, выходим из цикла
-            except errors.APIError as e:
-                logger.error(
-                    "API Error | Status: %s | Error: %s",
-                    str(e.code),
-                    str(e),
-                )
-                raise RuntimeError(f"Контур управления не ответил: {e}") from e
-            except Exception as e:
-                error_str = str(e)
-                # Добавляем обрывы связи и тайм-ауты в список того, что нужно терпеть
-                retriable_errors = ["503", "Server disconnected", "TimeoutError", "ClientConnectorError"]
-
-                if any(err in error_str for err in retriable_errors):
-                    if attempt < max_retries - 1:
-                        sleep_time = base_delay * (2**attempt)
-                        logger.warning("Сбой на линии (%s). Ждем %s сек. Попытка %s/%s", type(e).__name__, sleep_time, attempt + 1, max_retries)
-                        await asyncio.sleep(sleep_time)
-                        continue
-
-                # Системная или сетевая ошибка общего характера
-                logger.error("System/Network Error: %s\n%s", e, traceback.format_exc())
-                raise RuntimeError(f"Контур управления не ответил: {e}") from e
-
-        if response is None:
-            raise RuntimeError("Контур управления вернул пустой ответ")
+        try:
+            response = await self.client.aio.models.generate_content(
+                model=target_model,
+                contents=contents,
+                config=config,
+            )
+        except errors.APIError as e:
+            logger.error(
+                "API Error | Status: %s | Error: %s",
+                str(e.code),
+                str(e),
+            )
+            raise RuntimeError(f"Контур управления не ответил: {e}") from e
+        except Exception as e:
+            logger.error("System/Network Error: %s", e)
+            raise
 
         # Парсинг
         thought_text = ""
