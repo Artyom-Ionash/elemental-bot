@@ -15,7 +15,7 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Elemental Bot Control Panel")
-templates = Jinja2Templates(directory="src/core/http/templates")
+templates = Jinja2Templates(directory="src/features/admin_panel/templates")
 
 
 def verify_telegram_init_data(init_data: str, bot_token: str, admin_id: int) -> bool:

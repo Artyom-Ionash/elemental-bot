@@ -9,7 +9,7 @@ class RoutingResult(TypedDict):
 
 
 class TicketRouter:
-    def __init__(self):
+    def __init__(self) -> None:
         # Регулярки для экстренной маршрутизации (Fast Path - Хардкорные правила)
         self.police_pattern = re.compile(r"(убивают|напал|оружие|пистолет|нож|драка|стрельба|ограбили)", re.IGNORECASE)
         self.medical_pattern = re.compile(r"(кровь|сердце|задыхается|без сознания|ранение|рожает|инфаркт)", re.IGNORECASE)

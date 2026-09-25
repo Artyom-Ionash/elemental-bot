@@ -3,7 +3,7 @@ import logging
 
 import discord
 
-from core.bot.discord.guards import is_messageable
+from features.discord_bot.guards import is_messageable
 
 
 class DiscordHandler(logging.Handler):

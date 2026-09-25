@@ -2,8 +2,8 @@ import logging
 
 from telegram.ext import Application, MessageHandler, filters
 
-from core.bot.telegram.messenger import TelegramMessenger
 from core.integrations.base_provider import BaseLLMProvider
+from features.telegram_bot.messenger import TelegramMessenger
 from lib.token_calculator import TokenCalculator
 
 logger = logging.getLogger(__name__)

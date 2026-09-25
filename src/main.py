@@ -3,10 +3,10 @@ import logging
 
 from config import settings
 from core.bootstrap import init_common
-from core.bot.discord.client import setup_discord_client
-from core.bot.runners import run_discord_bot, run_telegram_bot
-from core.bot.telegram.client import setup_telegram_client
-from core.http.server import start_web_server
+from features.admin_panel.server import start_web_server
+from features.discord_bot.client import setup_discord_client
+from features.runners import run_discord_bot, run_telegram_bot
+from features.telegram_bot.client import setup_telegram_client
 
 logger = logging.getLogger(__name__)
 

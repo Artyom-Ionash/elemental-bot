@@ -5,9 +5,9 @@ import traceback
 import discord
 
 from config import settings
-from core.bot.discord.guards import is_messageable
 from core.integrations.base_provider import BaseLLMProvider
 from core.types.llm import MessageParam
+from features.discord_bot.guards import is_messageable
 from lib.context_builder import ContextBuilder
 
 logger = logging.getLogger(__name__)

@@ -1,8 +1,8 @@
 import asyncio
 import logging
 
-from core.bot.discord.client import DiscordBot
-from core.bot.telegram.client import TelegramBot
+from features.discord_bot.client import DiscordBot
+from features.telegram_bot.client import TelegramBot
 
 logger = logging.getLogger(__name__)
 

@@ -2,9 +2,9 @@ import logging
 
 import discord
 
-from core.bot.discord.guards import is_messageable
-from core.bot.discord.messenger import Messenger
 from core.integrations.base_provider import BaseLLMProvider
+from features.discord_bot.guards import is_messageable
+from features.discord_bot.messenger import Messenger
 from lib.context_builder import ContextBuilder
 
 logger = logging.getLogger(__name__)

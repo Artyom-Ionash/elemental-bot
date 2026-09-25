@@ -8,10 +8,11 @@ from telegram.ext import CallbackContext
 
 from config import settings
 from core.integrations.base_provider import BaseLLMProvider
+from core.types.llm import MessageParam
+from lib.ticket_router import TicketRouter
 from lib.token_calculator import TokenCalculator
 
 logger = logging.getLogger(__name__)
-from lib.ticket_router import TicketRouter
 
 
 class TelegramMessenger:
@@ -49,16 +50,18 @@ class TelegramMessenger:
     def system_prompt(self) -> str:
         return settings.system_prompt if self._system_prompt is None else self._system_prompt
 
-    async def handle(self, update: Update, context: CallbackContext) -> None:
+    async def handle(self, update: Update, context: CallbackContext[Any, Any, Any, Any]) -> None:
         if not update.message or not update.message.text:
             return
 
         user_request = update.message.text.strip()
         chat_id = update.message.chat_id
-        user_name = update.message.from_user.username or "Caller"
+        user_name = "Caller"
+        if update.message.from_user and update.message.from_user.username:
+            user_name = update.message.from_user.username
 
         # --- ФАЗА 1: FAST PATH (Маршрутизация без LLM) ---
-        route_result = self.router.route(user_request)  # Предполагается, что self.router = TicketRouter() в __init__
+        route_result = self.router.route(user_request)
 
         if route_result["action"] == "dispatch_police":
             await update.message.reply_text("🚨 **[СИСТЕМА: ВЫЗОВ ПЕРЕДАН В ПОЛИЦИЮ]**\nНаряд выехал. Оставайтесь в безопасном месте.")
@@ -78,10 +81,10 @@ class TelegramMessenger:
 
         # Строим контекст из истории чата (ваш существующий метод)
         self._add_message(chat_id, user_name, user_request)
-        context_text, msg_count = self._build_context(chat_id)
+        context_text, _msg_count = self._build_context(chat_id)
 
         final_prompt = f"--- ИСТОРИЯ ЧАТА ---\n{context_text}\n--- АКТУАЛЬНЫЙ ОТВЕТ АБОНЕНТА ---\n{user_name}: {user_request}"
-        messages = [
+        messages: list[MessageParam] = [
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": final_prompt},
         ]
@@ -115,8 +118,7 @@ class TelegramMessenger:
         Возвращает (контекст_строка, количество_сообщений).
         """
         hist = self.history.get(chat_id, [])
-        # Идём с конца (новые сообщения важнее)
-        messages_to_use = []
+        messages_to_use: list[str] = []
         current_tokens = 0
         count = 0
 
