@@ -2,7 +2,7 @@ from config import Settings
 from core.integrations.base_provider import BaseLLMProvider
 from core.integrations.gemini import GeminiProvider
 from core.integrations.openrouter import OpenRouterProvider
-from core.resilience import RetryingLLMProvider, RetryPolicy
+from core.integrations.resilience import RetryingLLMProvider, RetryPolicy
 
 
 def create_llm_provider(settings: Settings) -> BaseLLMProvider:

@@ -17,8 +17,8 @@
     - **Что это:** Обёртки над внешними сервисами (OpenAI, OpenRouter, Discord Gateway).
     - **Цель:** Изоляция внешней нестабильности. Если API изменится, мы меняем код только здесь.
 
-3.  **`core/resilience/`** (Resilience & Retry Policy)
-    - **Что это:** Модуль отказоустойчивости, содержащий [`RetryPolicy`](src/core/resilience/policy.py:6) и прокси-провайдер [`RetryingLLMProvider`](src/core/resilience/proxy.py:16).
+3.  **`core/integrations/resilience/`** (Resilience & Retry Policy)
+    - **Что это:** Подсистема отказоустойчивости, содержащая [`RetryPolicy`](src/core/integrations/resilience/policy.py:6) и прокси-провайдер [`RetryingLLMProvider`](src/core/integrations/resilience/proxy.py:16).
     - **Цель:** Прозрачное оборачивание любых `BaseLLMProvider` с экспоненциальной задержкой и защитой фазы рукопожатия при стриминге (Stream Handshake Guard).
 
 4.  **`core/types/`** (Domain Contracts)
@@ -74,7 +74,7 @@
 
 ### 4. Stream Handshake Guard (Защита фазы рукопожатия стриминга)
 
-При работе с потоковыми ответами (`AsyncGenerator`) логика повторов через [`RetryingLLMProvider`](src/core/resilience/proxy.py:16) обязана защищать **только фазу подключения и получения первого токена** (`anext`). Повторный запуск генератора после получения части ответа приведёт к дублированию текста у клиента.
+При работе с потоковыми ответами (`AsyncGenerator`) логика повторов через [`RetryingLLMProvider`](src/core/integrations/resilience/proxy.py:16) обязана защищать **только фазу подключения и получения первого токена** (`anext`). Повторный запуск генератора после получения части ответа приведёт к дублированию текста у клиента.
 
 ---
 

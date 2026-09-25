@@ -4,7 +4,7 @@ from collections.abc import Iterable
 import tenacity
 
 from core.integrations.base_provider import BaseLLMProvider
-from core.resilience.policy import RetryPolicy
+from core.integrations.resilience.policy import RetryPolicy
 from core.types.llm import CompletionResult, MessageParam
 
 logger = logging.getLogger(__name__)
