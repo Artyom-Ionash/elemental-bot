@@ -31,13 +31,13 @@
 
 Мы используем `mypy` в режиме `--strict` для защиты границ.
 
-### 1. Feature Layer (`features/`)
+### 1. Feature Layer & Vertical Slice Architecture ([`src/features/`](src/features/))
 
-- **Назначение:** Полноценные возможности бота (напр. `/chat`, `/commands`).
-- **Структура:** Модули, группирующие логику конкретной функции.
+- **Назначение:** Реализация возможностей бота на основе **Vertical Slice Architecture (VSA)**. Каждая фича в [`src/features/`](src/features/) (например, [`discord_bot`](src/features/discord_bot/), [`telegram_bot`](src/features/telegram_bot/), [`admin_panel`](src/features/admin_panel/)) представляет собой вертикальный срез (vertical slice), инкапсулирующий всю необходимую логику для конкретного бизнес-процесса или интерфейса взаимодействия (клиенты, обработчики, мессенджеры, галды/ограничения и шаблоны).
+- **Структура:** Автономные подпапки в [`src/features/`](src/features/), объединяющие специфичные для фичи компоненты.
 - **Правила:**
-  - Могут использовать `core/` и `lib/`.
-  - Запрещено напрямую вызывать внешние API в обход `core/integrations/`.
+  - Срезы могут использовать общие модули [`src/core/`](src/core/) и [`src/lib/`](src/lib/).
+  - Запрещено напрямую вызывать внешние API в обход [`src/core/integrations/`](src/core/integrations/).
 
 ### 2. Domain Logic (`lib/`)
 
