@@ -29,7 +29,8 @@ class RetryingLLMProvider(BaseLLMProvider):
         retryer = tenacity.AsyncRetrying(
             retry=tenacity.retry_if_exception(self.policy.is_retriable),
             stop=tenacity.stop_after_attempt(self.policy.max_retries),
-            wait=tenacity.wait_exponential(multiplier=self.policy.base_delay),
+            wait=tenacity.wait_random_exponential(multiplier=self.policy.base_delay),
+            before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
             reraise=True,
         )
 
@@ -42,4 +43,4 @@ class RetryingLLMProvider(BaseLLMProvider):
                 )
                 return result
 
-        raise RuntimeError("Превышено максимальное число попыток вызова LLM")
+        raise AssertionError("Unreachable")
