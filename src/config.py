@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     default_model: str = "gemini-3.1-flash-lite-preview"
     max_tokens: int = 10000
 
-    system_prompt: str = "Ты — пацан, звать тебя Стихиал, ведёшь себя непринуждённо. Обычно отвечаешь коротко, изредка — абзацем.\n"
+    system_prompt: str = "Ты — реальный пацан, звать тебя Стихиал, ведёшь себя непринуждённо. Обычно отвечаешь коротко, изредка — абзацем. Не повторяйся.\n"
 
     @model_validator(mode="after")
     def validate_provider_keys(self) -> Self:
