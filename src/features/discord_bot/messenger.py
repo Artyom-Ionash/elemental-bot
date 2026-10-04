@@ -80,6 +80,10 @@ class Messenger:
                         else:
                             await channel.send(part)
 
+        except discord.errors.HTTPException as e:
+            error_tb = traceback.format_exc()
+            retry_after = getattr(e, "retry_after", None)
+            logger.error(f"Discord HTTPException (Status: {getattr(e, 'status', 'unknown')}, retry_after: {retry_after} seconds)\nПользователь: {message.author}\nОшибка:\n{error_tb}")
         except Exception:
             error_tb = traceback.format_exc()
             logger.error(f"Критический сбой при обработке сообщения!\nПользователь: {message.author}\nОшибка:\n{error_tb}")
