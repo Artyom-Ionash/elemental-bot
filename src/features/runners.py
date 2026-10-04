@@ -1,5 +1,8 @@
 import asyncio
 import logging
+import traceback
+
+import discord
 
 from features.discord_bot.client import DiscordBot
 from features.telegram_bot.client import TelegramBot
@@ -23,6 +26,13 @@ async def run_discord_bot(discord_bot: DiscordBot) -> None:
     logger.info("Discord бот инициализируется...")
     try:
         await discord_bot.start_bot()
+    except discord.errors.HTTPException as e:
+        error_tb = traceback.format_exc()
+        retry_after = getattr(e, "retry_after", None)
+        logger.error(f"Discord HTTPException при запуске (Status: {getattr(e, 'status', 'unknown')}, retry_after: {retry_after} seconds):\nОшибка:\n{error_tb}")
+    except Exception:
+        error_tb = traceback.format_exc()
+        logger.error(f"Критический сбой при запуске Discord бота:\n{error_tb}")
     finally:
         logger.info("Остановка Discord бота...")
         await discord_bot.stop_bot()
