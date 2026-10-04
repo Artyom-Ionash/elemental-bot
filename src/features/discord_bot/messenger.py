@@ -32,14 +32,14 @@ class Messenger:
         system_prompt = settings.system_prompt
         channel = message.channel
 
-        async with channel.typing():
-            # --- ИЗВЛЕЧЕНИЕ ИСТОРИИ (делегировано в lib/) ---
-            context, message_count = await self.context_builder.build_context(channel=channel, before_message=message)
+        try:
+            async with channel.typing():
+                # --- ИЗВЛЕЧЕНИЕ ИСТОРИИ (делегировано в lib/) ---
+                context, message_count = await self.context_builder.build_context(channel=channel, before_message=message)
 
-            final_prompt = f"--- ИСТОРИЯ ЧАТА ---\n{context}\n--- АКТУАЛЬНЫЙ ЗАПРОС ---\n{current_message_block}"
+                final_prompt = f"--- ИСТОРИЯ ЧАТА ---\n{context}\n--- АКТУАЛЬНЫЙ ЗАПРОС ---\n{current_message_block}"
 
-            # --- ЗАПРОС К LLM ---
-            try:
+                # --- ЗАПРОС К LLM ---
                 messages: list[MessageParam] = [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": final_prompt},
@@ -80,10 +80,10 @@ class Messenger:
                         else:
                             await channel.send(part)
 
-            except Exception:
-                error_tb = traceback.format_exc()
-                logger.error(f"Критический сбой при обработке сообщения!\nПользователь: {message.author}\nОшибка:\n{error_tb}")
-                try:
-                    await message.reply("⚙️ **Система словила перегруз.** Датчики зафиксировали сбой, логи ушли инженеру. Попробуй ещё раз через пару минут.")
-                except discord.errors.Forbidden:
-                    pass
+        except Exception:
+            error_tb = traceback.format_exc()
+            logger.error(f"Критический сбой при обработке сообщения!\nПользователь: {message.author}\nОшибка:\n{error_tb}")
+            try:
+                await message.reply(f"⚙️ **Система словила перегруз или ошибку Discord API.**\n```py\n{error_tb[-1500:]}\n```")
+            except discord.errors.Forbidden:
+                pass
